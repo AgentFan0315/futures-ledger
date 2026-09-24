@@ -1,0 +1,63 @@
+{
+  "name": "futures-ledger",
+  "version": "1.0.0",
+  "description": "期货结算单长期记录与分析工具：自动解析监控中心每日结算单，本地存档、盈亏与风险分析（软件与数据完全分离）",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "test": "node test/verify.js test/fixtures/123456789_2026-09-21.xls test/fixtures/123456789_2026-09-22.xls && node test/acceptance.js && node test/store.test.js"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  },
+  "build": {
+    "appId": "com.futuresledger.app",
+    "productName": "期货结算分析",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.finance",
+      "target": [
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "author": "AgentFan0315",
+  "keywords": [
+    "期货",
+    "结算单",
+    "监控中心",
+    "盈亏分析",
+    "Electron"
+  ],
+  "homepage": "https://github.com/AgentFan0315/futures-ledger",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AgentFan0315/futures-ledger.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AgentFan0315/futures-ledger/issues"
+  }
+}

@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'">
+<title>期货结算分析</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="topbar">
+  <div class="brand">期货结算分析</div>
+  <div id="accountInfo" class="account-info"></div>
+  <select id="accountSelect" class="acct-select hidden" title="切换账户"></select>
+  <div class="spacer"></div>
+  <button id="btnImport" class="btn primary">导入结算单</button>
+</header>
+
+<nav id="tabs">
+  <button class="tab active" data-tab="dashboard">仪表盘</button>
+  <button class="tab" data-tab="stats">交易统计</button>
+  <button class="tab" data-tab="summary">汇总</button>
+  <button class="tab" data-tab="positions">历史持仓</button>
+  <button class="tab" data-tab="details">明细</button>
+  <button class="tab" data-tab="products">品种统计</button>
+  <button class="tab" data-tab="manage">数据管理</button>
+</nav>
+
+<main>
+  <section id="page-dashboard" class="page active">
+    <div id="dayBanner" class="day-banner"></div>
+    <div id="kpiCards" class="kpi-grid"></div>
+
+    <div class="chart-grid">
+      <div class="panel"><h3>净值曲线（客户权益 − 累计入金 <span id="cumDepositLbl" class="dim"></span>）</h3><div id="chNav" class="chart"></div></div>
+      <div class="panel"><h3>风险度（按日）</h3><div id="chRisk" class="chart"></div></div>
+      <div class="panel"><h3>品种累计净盈亏拆分</h3><div id="chProduct" class="chart"></div></div>
+      <div class="panel"><h3>每日成交手数</h3><div id="chLots" class="chart"></div></div>
+    </div>
+
+    <div class="panel">
+      <h3>当前持仓（截至 <span id="posDate"></span>）</h3>
+      <div class="table-wrap short"><table id="tblPositions"></table></div>
+      <div id="posEmpty" class="dim hidden" style="padding:8px 4px">当前无持仓</div>
+    </div>
+
+    <details class="note">
+      <summary>口径说明（点击展开）</summary>
+      <p>全工具盈亏统一用「逐笔对冲」口径（开仓价→平仓价），与结算单主表"平仓盈亏"可能存在小额尾差（结算口径调整项，属正常），以工具验算为准。权益的唯一标准是「客户权益」（= 当日结存 + 浮动盈亏），不是当日结存。浮动盈亏按今结算价 vs 你的开仓成本计算；结算价 = 全天成交量加权平均价，≠收盘价。</p>
+    </details>
+    <div id="noticeBar" class="hidden"></div>
+  </section>
+
+  <section id="page-stats" class="page">
+    <div id="statCards" class="kpi-grid"></div>
+    <div class="panel">
+      <h3>日内（今开今平）vs 隔夜持仓</h3>
+      <div class="table-wrap short"><table id="tblIntraday"></table></div>
+    </div>
+    <div class="panel">
+      <h3>手续费拆分（开仓 / 平仓-日内 / 平仓-隔夜）</h3>
+      <div class="table-wrap"><table id="tblFeeSplit"></table></div>
+    </div>
+    <div class="panel">
+      <h3>品种胜率与盈亏（基于平仓明细）</h3>
+      <div class="table-wrap"><table id="tblProductDetail"></table></div>
+    </div>
+  </section>
+
+  <section id="page-summary" class="page">
+    <div class="filters">
+      <div class="seg">
+        <button class="seg-btn active" id="segDaily">按日</button>
+        <button class="seg-btn" id="segMonthly">按月</button>
+      </div>
+      <button class="btn small" id="btnSummaryCsv">导出 CSV</button>
+      <button class="btn small" id="btnSummaryXlsx">导出 Excel</button>
+      <button class="btn small hidden" id="btnSummaryPrint">打印月度留档</button>
+      <span class="dim" id="summaryHint">净盈亏 = 平仓盈亏 − 手续费；当日总盈亏 = 平仓盈亏 + 浮动盈亏 − 手续费；验算 = 链式验算（上日结存+出入金+平仓盈亏+浮动盈亏−手续费 = 客户权益）</span>
+    </div>
+    <div class="panel" id="summaryDailyPanel">
+      <h3>按日汇总</h3>
+      <div class="table-wrap"><table id="tblDaily"></table></div>
+    </div>
+    <div class="panel hidden" id="summaryMonthlyPanel">
+      <h3>月度汇总</h3>
+      <div class="table-wrap"><table id="tblMonthly"></table></div>
+    </div>
+  </section>
+
+  <section id="page-positions" class="page">
+    <div class="filters">
+      <label>选择日期 <select id="posDateSelect"></select></label>
+      <span class="dim">查看历史上任一交易日收盘时的持仓快照（数据来自当日结算单持仓明细）</span>
+    </div>
+    <div class="table-wrap"><table id="tblHistoryPositions"></table></div>
+  </section>
+
+  <section id="page-details" class="page">
+    <div class="filters">
+      <div class="seg">
+        <button class="seg-btn active" id="segTrades">成交明细</button>
+        <button class="seg-btn" id="segCloses">平仓明细</button>
+      </div>
+    </div>
+
+    <div class="panel" id="detailsTradesPanel">
+      <div class="filters">
+        <label>日期 <input type="date" id="fTradeFrom"> ~ <input type="date" id="fTradeTo"></label>
+        <label>品种 <select id="fTradeProduct"><option value="">全部</option></select></label>
+        <label>方向 <select id="fTradeSide"><option value="">全部</option><option>买</option><option>卖</option></select></label>
+        <label>开平 <select id="fTradeOC"><option value="">全部</option><option>开</option><option>平</option></select></label>
+        <label>合约 <input type="text" id="fTradeContract" placeholder="如 AG2610" class="narrow"></label>
+        <button class="btn small" id="btnTradeReset">重置</button>
+        <button class="btn small" id="btnTradeExport">导出 CSV</button>
+        <span id="tradeCount" class="dim"></span>
+      </div>
+      <div class="table-wrap"><table id="tblTrades"></table></div>
+      <div class="pager"><button class="btn small" id="pgPrev">上一页</button><span id="pgInfo"></span><button class="btn small" id="pgNext">下一页</button></div>
+    </div>
+
+    <div class="panel hidden" id="detailsClosesPanel">
+      <div class="filters">
+        <label>日期 <input type="date" id="fCloseFrom"> ~ <input type="date" id="fCloseTo"></label>
+        <label>品种 <select id="fCloseProduct"><option value="">全部</option></select></label>
+        <label>方向 <select id="fCloseSide"><option value="">全部</option><option>买</option><option>卖</option></select></label>
+        <label>结果 <select id="fCloseWin"><option value="">全部</option><option value="win">盈利</option><option value="loss">亏损</option></select></label>
+        <label>合约 <input type="text" id="fCloseContract" placeholder="如 AG2610" class="narrow"></label>
+        <button class="btn small" id="btnCloseReset">重置</button>
+        <button class="btn small" id="btnCloseExport">导出 CSV</button>
+        <span id="closeCount" class="dim"></span>
+      </div>
+      <div class="table-wrap"><table id="tblCloses"></table></div>
+      <div class="pager"><button class="btn small" id="pgClosePrev">上一页</button><span id="pgCloseInfo"></span><button class="btn small" id="pgCloseNext">下一页</button></div>
+    </div>
+  </section>
+
+  <section id="page-products" class="page">
+    <div class="panel"><h3>品种累计净盈亏</h3><div id="chProduct2" class="chart tall"></div></div>
+    <div class="table-wrap"><table id="tblProducts"></table></div>
+  </section>
+
+  <section id="page-manage" class="page">
+    <div class="panel">
+      <h3>数据健康</h3>
+      <div id="healthGrid" class="health-grid"></div>
+    </div>
+
+    <div class="panel">
+      <h3>数据目录（软件与数据分离，所有数据与原始结算单归档均保存在此）</h3>
+      <div class="cfg-row dir-row"><code id="dataDirPath"></code></div>
+      <div class="cfg-row dir-actions">
+        <button id="btnOpenDir" class="btn">在文件夹中显示</button>
+        <button id="btnDataDir" class="btn">更换数据目录…</button>
+        <label class="chk"><input type="checkbox" id="chkOverwrite"> 导入时覆盖已有同日数据</label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>配置（保存在数据目录 config.json）</h3>
+      <div class="cfg-row">
+        <label>启用前累计净入金（元）<input type="number" id="cfgInitialDeposit" step="0.01"> <span class="dim">净值 = 客户权益 − 累计入金；账户启用前已入金请填此处</span></label>
+      </div>
+      <div class="cfg-row">
+        <label>监控目录（可选）<input type="text" id="cfgMonitorDir" placeholder="留空则不启用" readonly>
+          <button class="btn small" id="btnMonitorDir">选择…</button>
+          <button class="btn small" id="btnMonitorDirClear">清除</button>
+          <span class="dim">选定后，该文件夹出现新结算单将自动导入（5 秒检测一次）</span></label>
+      </div>
+      <div class="cfg-row">
+        <label>外部备份目录（可选）<input type="text" id="cfgBackupDir" placeholder="留空则不启用" readonly>
+          <button class="btn small" id="btnBackupDir">选择…</button>
+          <button class="btn small" id="btnBackupDirClear">清除</button>
+          <span class="dim">每次导入成功后，解析数据自动同步复制到该目录（如移动硬盘/网盘路径）</span></label>
+      </div>
+      <button class="btn" id="btnSaveCfg">保存配置</button>
+      <span id="cfgMsg" class="dim"></span>
+    </div>
+
+    <div class="panel">
+      <h3>备份与恢复</h3>
+      <div class="cfg-row dir-actions">
+        <button id="btnBackupExport" class="btn">导出完整备份（含原始 xls）…</button>
+        <button id="btnBackupRestore" class="btn">从备份恢复…</button>
+      </div>
+      <div class="table-wrap short"><table id="tblBackups"></table></div>
+      <p class="dim">自动备份在每次导入/删除后生成（只含解析数据，滚动保留最近 10 份）；导出完整备份包含原始结算单，建议每月导出一次留存。</p>
+    </div>
+
+    <div class="panel">
+      <h3>已导入结算单（共 <span id="stmtCount">0</span> 天）</h3>
+      <div class="table-wrap"><table id="tblStmts"></table></div>
+      <p class="dim">删除的结算单会进入回收站，可随时恢复。</p>
+    </div>
+
+    <div class="panel">
+      <h3>回收站（共 <span id="trashCount">0</span> 天）</h3>
+      <div class="table-wrap short"><table id="tblTrash"></table></div>
+      <div class="cfg-row dir-actions"><button id="btnTrashPurge" class="btn danger">清空回收站</button></div>
+    </div>
+  </section>
+</main>
+
+<div id="emptyState" class="empty hidden">
+  <h2>还没有数据</h2>
+  <p>点击右上角「导入结算单」，选择期货公司导出的 .xls 结算单文件（可多选）。</p>
+  <p class="dim">数据将保存在独立的数据目录中，与程序完全分离。</p>
+</div>
+
+<div id="dropMask" class="drop-mask hidden"><div>松开以导入结算单</div></div>
+<div id="crashOverlay" class="crash hidden">
+  <div>
+    <h2>界面出现异常</h2>
+    <p id="crashMsg" class="dim"></p>
+    <p class="dim">错误详情已记录到数据目录 logs/app.log，可重启应用或联系开发者。</p>
+    <button class="btn" onclick="location.reload()">重新加载</button>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="vendor/echarts.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
